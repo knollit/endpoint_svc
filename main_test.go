@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
-	"io/ioutil"
 	"log"
 	"net"
 	"testing"
@@ -11,16 +9,16 @@ import (
 	"github.com/mikeraimondi/knollit/common"
 )
 
-func TestServer(t *testing.T) {
-	var logBuf bytes.Buffer
-	defer func() {
-		log, err := ioutil.ReadAll(&logBuf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Log(string(log))
-	}()
+type logWriter struct {
+	*testing.T
+}
 
+func (l *logWriter) Write(p []byte) (n int, err error) {
+	l.Log(string(p))
+	return len(p), nil
+}
+
+func TestServer(t *testing.T) {
 	// TODO setup DB
 
 	db, _ := sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
@@ -35,7 +33,7 @@ func TestServer(t *testing.T) {
 		db:       db,
 		listener: l,
 		ready:    rdy,
-		logger:   log.New(&logBuf, "", log.LstdFlags),
+		logger:   log.New(&logWriter{t}, "", log.LstdFlags),
 	}
 
 	errs := make(chan error)
