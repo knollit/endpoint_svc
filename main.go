@@ -25,53 +25,60 @@ var (
 )
 
 func main() {
+	logger := log.New(os.Stdout, "", log.LstdFlags)
 	connStr := fmt.Sprintf("user=postgres host=%v password=%v dbname=postgres sslmode=disable", *dbAddr, *dbPW)
 	db, _ := sql.Open("postgres", connStr)
 
 	// Load server cert
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
 	if err != nil {
-		log.Fatal("Failed to open server cert and/or key: ", err)
+		logger.Fatal("Failed to open server cert and/or key: ", err)
 	}
 
 	// Load CA cert
 	caCert, err := ioutil.ReadFile(*caPath)
 	if err != nil {
-		log.Fatal("Failed to open CA cert: ", err)
+		logger.Fatal("Failed to open CA cert: ", err)
 	}
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-		log.Fatal("Failed to parse CA cert")
+		logger.Fatal("Failed to parse CA cert")
 	}
 
-	server := &server{
-		DB: db,
-		TLSConf: &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			RootCAs:            caCertPool,
-			ClientAuth:         tls.RequireAndVerifyClientCert,
-			ClientCAs:          caCertPool,
-			InsecureSkipVerify: true, //TODO dev only
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			},
-			PreferServerCipherSuites: true,
-			MinVersion:               tls.VersionTLS12,
+	tlsConf := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            caCertPool,
+		ClientAuth:         tls.RequireAndVerifyClientCert,
+		ClientCAs:          caCertPool,
+		InsecureSkipVerify: true, //TODO dev only
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 		},
+		PreferServerCipherSuites: true,
+		MinVersion:               tls.VersionTLS12,
+	}
+	l, err := tls.Listen("tcp", ":13800", tlsConf)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	server := &server{
+		db:       db,
+		logger:   logger,
+		listener: l,
 	}
 	defer func() {
 		if err := server.Close(); err != nil {
-			log.Println("Failed to close server: ", err)
+			server.logger.Println("Failed to close server: ", err)
 		}
 	}()
 
-	log.Fatal(server.run(":13800"))
+	server.logger.Fatal(server.run())
 }
 
 type server struct {
-	DB       *sql.DB
-	TLSConf  *tls.Config
+	db       *sql.DB
+	logger   *log.Logger
 	listener net.Listener
 	ready    chan int
 }
@@ -79,25 +86,20 @@ type server struct {
 func (s *server) handler(conn net.Conn) {
 	defer conn.Close()
 	buf, _, err := common.ReadWithSize(conn)
-	log.Println(buf)
+	s.logger.Println(buf)
 	if err != nil {
-		log.Print(err)
+		s.logger.Print(err)
 		// TODO send error
 		return
 	}
 }
 
-func (s *server) run(addr string) error {
-	if err := s.DB.Ping(); err != nil {
+func (s *server) run() error {
+	if err := s.db.Ping(); err != nil {
 		return err
 	}
-	l, err := tls.Listen("tcp", addr, s.TLSConf)
-	if err != nil {
-		return err
-	}
-	s.listener = l
 
-	log.Printf("Listening for requests on %s...\n", addr)
+	s.logger.Printf("Listening for requests on %s...\n", s.listener.Addr())
 	if s.ready != nil {
 		s.ready <- 1
 	}
@@ -112,10 +114,10 @@ func (s *server) run(addr string) error {
 
 func (s *server) Close() error {
 	if err := s.listener.Close(); err != nil {
-		log.Println("Failed to close TCP listener cleanly: ", err)
+		s.logger.Println("Failed to close TCP listener cleanly: ", err)
 	}
-	if err := s.DB.Close(); err != nil {
-		log.Println("Failed to close database connection cleanly: ", err)
+	if err := s.db.Close(); err != nil {
+		s.logger.Println("Failed to close database connection cleanly: ", err)
 	}
 
 	return nil

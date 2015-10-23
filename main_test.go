@@ -1,60 +1,58 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"bytes"
 	"database/sql"
 	"io/ioutil"
+	"log"
+	"net"
 	"testing"
+
+	"github.com/mikeraimondi/knollit/common"
 )
 
 func TestServer(t *testing.T) {
+	var logBuf bytes.Buffer
+	defer func() {
+		log, err := ioutil.ReadAll(&logBuf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(string(log))
+	}()
+
 	// TODO setup DB
 
 	db, _ := sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
 
-	cert, err := tls.LoadX509KeyPair("certs/test-server.crt", "certs/test-server.key")
+	const addr = ":13900"
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		t.Fatal("Failed to open server cert and/or key: ", err)
+		t.Fatal(err)
 	}
-
-	caCert, err := ioutil.ReadFile("certs/test-ca.crt")
-	if err != nil {
-		t.Fatal("Failed to open CA cert: ", err)
-	}
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-		t.Fatal("Failed to parse CA cert")
-	}
-
 	rdy := make(chan int)
 	server := &server{
-		DB: db,
-		TLSConf: &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			RootCAs:            caCertPool,
-			ClientAuth:         tls.RequireAndVerifyClientCert,
-			ClientCAs:          caCertPool,
-			InsecureSkipVerify: true,
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			},
-			PreferServerCipherSuites: true,
-			MinVersion:               tls.VersionTLS12,
-		},
-		ready: rdy,
+		db:       db,
+		listener: l,
+		ready:    rdy,
+		logger:   log.New(&logBuf, "", log.LstdFlags),
 	}
 
 	errs := make(chan error)
 
 	go func() {
-		errs <- server.run(":13900")
+		errs <- server.run()
 	}()
 	select {
 	case err = <-errs:
 		t.Error(err)
 	case <-rdy:
-		// make request here
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		common.WriteWithSize(conn, []byte("foo"))
 	}
 }
