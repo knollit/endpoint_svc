@@ -6,10 +6,10 @@ message Request {
     INDEX = 1;
   }
   Action action = 1;
-  Organization organization = 2;
+  Endpoint endpoint = 2;
 }
 
-message Organization {
-  string name = 1;
-  string error = 2;
+message Endpoint {
+  string error = 1;
+  string watchpointURL = 2;
 }
