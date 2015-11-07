@@ -1,8 +1,8 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE TABLE endpoints (
+CREATE TABLE IF NOT EXISTS endpoints (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc(),
-  watchpointURL text
+  watchpointURL TEXT
 );
 COMMENT ON TABLE endpoints IS 'API endpoints registered with the service';
 COMMENT ON COLUMN endpoints.id IS 'UUID of endpoint';

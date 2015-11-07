@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"io/ioutil"
 	"log"
 	"net"
 	"testing"
@@ -21,18 +22,32 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func TestServer(t *testing.T) {
-	db, _ := sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
-
-	// Test setup
+func TestEndpointIndexWithOne(t *testing.T) {
+	// Create test database. Ignore errors.
+	db, _ := sql.Open("postgres", "user=mike host=localhost sslmode=disable")
 	if err := db.Ping(); err != nil {
 		t.Fatal(err)
 	}
-	db.Exec("BEGIN")
+	db.Exec("CREATE DATABASE endpoints_test")
+	db.Close()
+
+	// Setup test database
+	// TODO don't use mike
+	db, _ = sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
+	setupSQL, _ := ioutil.ReadFile("db/db.sql")
+	if _, err := db.Exec(string(setupSQL)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("BEGIN"); err != nil {
+		t.Fatal(err)
+	}
 	defer db.Exec("ROLLBACK")
 
+	// Test-specific setup
 	const watchpointURL = "test"
-	db.Exec("INSERT INTO endpoints (watchpointURL) VALUES ($1)", watchpointURL)
+	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL) VALUES ($1)", watchpointURL); err != nil {
+		t.Fatal(err)
+	}
 
 	// Server setup
 	const addr = ":13900"
@@ -55,10 +70,11 @@ func TestServer(t *testing.T) {
 	}()
 	select {
 	case err = <-errs:
-		t.Error(err)
+		t.Fatal(err)
 	case <-time.NewTimer(10 * time.Second).C:
 		t.Fatal("Timed out waiting for server to start")
 	case <-rdy:
+		defer server.Close()
 
 		// Begin test
 		conn, err := net.Dial("tcp", addr)
@@ -73,11 +89,13 @@ func TestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		common.WriteWithSize(conn, data)
+		if _, err := common.WriteWithSize(conn, data); err != nil {
+			t.Fatal(err)
+		}
 
 		buf, _, err := common.ReadWithSize(conn)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("Error reading response from server: %v", err)
 		}
 		endpointMsg := &endpointProto.Endpoint{}
 		if err := proto.Unmarshal(buf, endpointMsg); err != nil {

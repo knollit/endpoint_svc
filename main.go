@@ -11,9 +11,11 @@ import (
 	"net"
 	"os"
 
+	"github.com/golang/protobuf/proto"
 	_ "github.com/lib/pq"
 
 	"github.com/mikeraimondi/knollit/common"
+	endpointProto "github.com/mikeraimondi/knollit/endpoints/proto"
 )
 
 var (
@@ -86,12 +88,36 @@ type server struct {
 func (s *server) handler(conn net.Conn) {
 	defer conn.Close()
 	buf, _, err := common.ReadWithSize(conn)
-	s.logger.Println(buf)
+	if err != nil {
+		s.logger.Print("Error reading request: ", err)
+		// TODO send error
+		return
+	}
+	req := &endpointProto.Request{}
+	if err := proto.Unmarshal(buf, req); err != nil {
+		s.logger.Print("Error unmarshaling message: ", err)
+		// TODO send error
+		return
+	}
+	endpoints, err := allEndpoints(s)
 	if err != nil {
 		s.logger.Print(err)
 		// TODO send error
 		return
 	}
+	for _, endpoint := range endpoints {
+		data, err := proto.Marshal(&endpointProto.Endpoint{WatchpointURL: *proto.String(endpoint.WatchpointURL)})
+		if err != nil {
+			log.Print(err)
+			// TODO send error
+			return
+		}
+		if _, err := common.WriteWithSize(conn, data); err != nil {
+			log.Print(err)
+		}
+	}
+	return
+
 }
 
 func (s *server) run() error {
