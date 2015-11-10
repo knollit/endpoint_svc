@@ -1,0 +1,11 @@
+namespace endpoints;
+
+enum Action : byte { New, Index }
+
+table Endpoint {
+  action:Action;
+  error:string;
+  watchpointURL:string;
+}
+
+root_type Endpoint;

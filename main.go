@@ -11,11 +11,11 @@ import (
 	"net"
 	"os"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/google/flatbuffers/go"
 	_ "github.com/lib/pq"
 
 	"github.com/mikeraimondi/knollit/common"
-	endpointProto "github.com/mikeraimondi/knollit/endpoints/proto"
+	"github.com/mikeraimondi/knollit/endpoints/endpoints"
 )
 
 var (
@@ -93,27 +93,20 @@ func (s *server) handler(conn net.Conn) {
 		// TODO send error
 		return
 	}
-	req := &endpointProto.Request{}
-	if err := proto.Unmarshal(buf, req); err != nil {
-		s.logger.Print("Error unmarshaling message: ", err)
-		// TODO send error
+	req := endpoints.GetRootAsEndpoint(buf, 0)
+	if req.Action() == endpoints.ActionNew {
 		return
 	}
-	endpoints, err := allEndpoints(s)
+	endPoints, err := allEndpoints(s)
 	if err != nil {
 		s.logger.Print(err)
 		// TODO send error
 		return
 	}
-	for _, endpoint := range endpoints {
-		data, err := proto.Marshal(&endpointProto.Endpoint{WatchpointURL: *proto.String(endpoint.WatchpointURL)})
-		if err != nil {
-			log.Print(err)
-			// TODO send error
-			return
-		}
-		if _, err := common.WriteWithSize(conn, data); err != nil {
-			log.Print(err)
+	b := flatbuffers.NewBuilder(0)
+	for _, e := range endPoints {
+		if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
+			s.logger.Print(err)
 		}
 	}
 	return

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/google/flatbuffers/go"
 	"github.com/mikeraimondi/knollit/common"
-	endpointProto "github.com/mikeraimondi/knollit/endpoints/proto"
+	"github.com/mikeraimondi/knollit/endpoints/endpoints"
 )
 
 type logWriter struct {
@@ -83,13 +83,12 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		}
 		defer conn.Close()
 
-		data, err := proto.Marshal(&endpointProto.Request{
-			Action: endpointProto.Request_INDEX,
-		})
-		if err != nil {
-			t.Fatal(err)
+		b := flatbuffers.NewBuilder(0)
+		endpointReq := endpoint{
+			WatchpointURL: watchpointURL,
+			Action:        endpoints.ActionIndex,
 		}
-		if _, err := common.WriteWithSize(conn, data); err != nil {
+		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -97,12 +96,9 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error reading response from server: %v", err)
 		}
-		endpointMsg := &endpointProto.Endpoint{}
-		if err := proto.Unmarshal(buf, endpointMsg); err != nil {
-			t.Fatal(err)
-		}
+		endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
 
-		if endpointMsg.WatchpointURL != watchpointURL {
+		if string(endpointMsg.WatchpointURL()) != watchpointURL {
 			t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
 		}
 	}
