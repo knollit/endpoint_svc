@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/google/flatbuffers/go"
 	_ "github.com/lib/pq"
@@ -79,10 +80,11 @@ func main() {
 }
 
 type server struct {
-	db       *sql.DB
-	logger   *log.Logger
-	listener net.Listener
-	ready    chan int
+	db          *sql.DB
+	logger      *log.Logger
+	listener    net.Listener
+	ready       chan int
+	builderPool *sync.Pool
 }
 
 func (s *server) handler(conn net.Conn) {
@@ -103,7 +105,8 @@ func (s *server) handler(conn net.Conn) {
 		// TODO send error
 		return
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := s.builderPool.Get().(*flatbuffers.Builder)
+	defer s.builderPool.Put(b)
 	for _, e := range endPoints {
 		if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
 			s.logger.Print(err)
@@ -116,6 +119,12 @@ func (s *server) handler(conn net.Conn) {
 func (s *server) run() error {
 	if err := s.db.Ping(); err != nil {
 		return err
+	}
+
+	s.builderPool = &sync.Pool{
+		New: func() interface{} {
+			return flatbuffers.NewBuilder(0)
+		},
 	}
 
 	s.logger.Printf("Listening for requests on %s...\n", s.listener.Addr())
