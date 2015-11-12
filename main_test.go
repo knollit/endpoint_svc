@@ -85,8 +85,7 @@ func TestEndpointIndexWithOne(t *testing.T) {
 
 		b := flatbuffers.NewBuilder(0)
 		endpointReq := endpoint{
-			WatchpointURL: watchpointURL,
-			Action:        endpoints.ActionIndex,
+			Action: endpoints.ActionIndex,
 		}
 		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
 			t.Fatal(err)
@@ -98,6 +97,9 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		}
 		endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
 
+		if len(string(endpointMsg.Id())) <= 24 {
+			t.Fatalf("Expected UUID for ID, got %v", string(endpointMsg.Id()))
+		}
 		if string(endpointMsg.WatchpointURL()) != watchpointURL {
 			t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
 		}

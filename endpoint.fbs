@@ -3,9 +3,11 @@ namespace endpoints;
 enum Action : byte { New, Index }
 
 table Endpoint {
+  id:string;
+  watchpointURL:string;
+
   action:Action;
   error:string;
-  watchpointURL:string;
 }
 
 root_type Endpoint;
