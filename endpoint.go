@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+
 	"github.com/google/flatbuffers/go"
 	"github.com/mikeraimondi/knollit/endpoints/endpoints"
 )
@@ -12,8 +14,8 @@ type endpoint struct {
 	err           error
 }
 
-func allEndpoints(s *server) (endpoints []endpoint, err error) {
-	rows, err := s.db.Query("SELECT id, watchpointURL FROM endpoints")
+func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
+	rows, err := db.Query("SELECT id, watchpointURL FROM endpoints")
 	if err != nil {
 		return
 	}

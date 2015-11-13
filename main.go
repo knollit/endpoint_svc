@@ -99,7 +99,7 @@ func (s *server) handler(conn net.Conn) {
 	if req.Action() == endpoints.ActionNew {
 		return
 	}
-	endPoints, err := allEndpoints(s)
+	endPoints, err := allEndpoints(s.db)
 	if err != nil {
 		s.logger.Print(err)
 		// TODO send error

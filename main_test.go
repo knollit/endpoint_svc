@@ -22,11 +22,11 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func TestEndpointIndexWithOne(t *testing.T) {
+func setupDB() (db *sql.DB, err error) {
 	// Create test database. Ignore errors.
-	db, _ := sql.Open("postgres", "user=mike host=localhost sslmode=disable")
-	if err := db.Ping(); err != nil {
-		t.Fatal(err)
+	db, _ = sql.Open("postgres", "user=mike host=localhost sslmode=disable")
+	if err = db.Ping(); err != nil {
+		return
 	}
 	db.Exec("CREATE DATABASE endpoints_test")
 	db.Close()
@@ -35,11 +35,17 @@ func TestEndpointIndexWithOne(t *testing.T) {
 	// TODO don't use mike
 	db, _ = sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
 	setupSQL, _ := ioutil.ReadFile("db/db.sql")
-	if _, err := db.Exec(string(setupSQL)); err != nil {
-		t.Fatal(err)
+	if _, err = db.Exec(string(setupSQL)); err != nil {
+		return
 	}
-	if _, err := db.Exec("BEGIN"); err != nil {
-		t.Fatal(err)
+	_, err = db.Exec("BEGIN")
+	return
+}
+
+func TestEndpointIndexWithOne(t *testing.T) {
+	db, err := setupDB()
+	if err != nil {
+		t.Fatal("Error setting up DB: ", err)
 	}
 	defer db.Exec("ROLLBACK")
 
@@ -103,5 +109,30 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		if string(endpointMsg.WatchpointURL()) != watchpointURL {
 			t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
 		}
+	}
+}
+
+func TestAllEndpoints(t *testing.T) {
+	db, err := setupDB()
+	if err != nil {
+		t.Fatal("Error setting up DB: ", err)
+	}
+	defer db.Exec("ROLLBACK")
+
+	// Test-specific setup
+	const watchpointURL = "test"
+	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL) VALUES ($1)", watchpointURL); err != nil {
+		t.Fatal(err)
+	}
+
+	endpoints, err := allEndpoints(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := len(endpoints); l != 1 {
+		t.Fatalf("Expected 1 endpoint, got %v", l)
+	}
+	if endpoints[0].WatchpointURL != watchpointURL {
+		t.Fatalf("Expected %v for URL, got %v", watchpointURL, endpoints[0].WatchpointURL)
 	}
 }
