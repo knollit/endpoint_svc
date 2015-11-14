@@ -4,6 +4,7 @@ enum Action : byte { New, Index }
 
 table Endpoint {
   id:string;
+  organization:string;
   watchpointURL:string;
 
   action:Action;

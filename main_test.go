@@ -22,14 +22,20 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+var dbCreated bool
+
 func setupDB() (db *sql.DB, err error) {
-	// Create test database. Ignore errors.
-	db, _ = sql.Open("postgres", "user=mike host=localhost sslmode=disable")
-	if err = db.Ping(); err != nil {
-		return
+	if !dbCreated {
+		// Create test database. Ignore errors.
+		db, _ = sql.Open("postgres", "user=mike host=localhost sslmode=disable")
+		if err = db.Ping(); err != nil {
+			return
+		}
+		db.Exec("DROP DATABASE IF EXISTS endpoints_test")
+		db.Exec("CREATE DATABASE endpoints_test")
+		db.Close()
+		dbCreated = true
 	}
-	db.Exec("CREATE DATABASE endpoints_test")
-	db.Close()
 
 	// Setup test database
 	// TODO don't use mike
@@ -51,7 +57,8 @@ func TestEndpointIndexWithOne(t *testing.T) {
 
 	// Test-specific setup
 	const watchpointURL = "test"
-	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL) VALUES ($1)", watchpointURL); err != nil {
+	const org = "testOrg"
+	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL, organization) VALUES ($1, $2)", watchpointURL, org); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,6 +116,9 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		if string(endpointMsg.WatchpointURL()) != watchpointURL {
 			t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
 		}
+		if string(endpointMsg.Organization()) != org {
+			t.Fatalf("Expected %v for organization, got %v", org, endpointMsg.Organization)
+		}
 	}
 }
 
@@ -121,7 +131,8 @@ func TestAllEndpoints(t *testing.T) {
 
 	// Test-specific setup
 	const watchpointURL = "test"
-	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL) VALUES ($1)", watchpointURL); err != nil {
+	const org = "testOrg"
+	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL, organization) VALUES ($1, $2)", watchpointURL, org); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,5 +145,8 @@ func TestAllEndpoints(t *testing.T) {
 	}
 	if endpoints[0].WatchpointURL != watchpointURL {
 		t.Fatalf("Expected %v for URL, got %v", watchpointURL, endpoints[0].WatchpointURL)
+	}
+	if endpoints[0].Organization != org {
+		t.Fatalf("Expected %v for organization, got %v", org, endpoints[0].Organization)
 	}
 }
