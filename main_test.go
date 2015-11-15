@@ -143,10 +143,37 @@ func TestAllEndpoints(t *testing.T) {
 	if l := len(endpoints); l != 1 {
 		t.Fatalf("Expected 1 endpoint, got %v", l)
 	}
-	if endpoints[0].WatchpointURL != watchpointURL {
-		t.Fatalf("Expected %v for URL, got %v", watchpointURL, endpoints[0].WatchpointURL)
+	e := endpoints[0]
+	if len(e.ID) <= 24 {
+		t.Fatalf("Expected UUID for ID, got %v", e.ID)
 	}
-	if endpoints[0].Organization != org {
-		t.Fatalf("Expected %v for organization, got %v", org, endpoints[0].Organization)
+	if e.WatchpointURL != watchpointURL {
+		t.Fatalf("Expected %v for URL, got %v", watchpointURL, e.WatchpointURL)
+	}
+	if e.Organization != org {
+		t.Fatalf("Expected %v for organization, got %v", org, e.Organization)
+	}
+}
+
+func TestToFlatBufferBytes(t *testing.T) {
+	e := endpoint{
+		ID:            "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
+		Organization:  "Test Org",
+		WatchpointURL: "http://foo.bar",
+		Action:        endpoints.ActionNew,
+	}
+	buf := e.toFlatBufferBytes(flatbuffers.NewBuilder(0))
+	eMsg := endpoints.GetRootAsEndpoint(buf, 0)
+	if id := string(eMsg.Id()); e.ID != id {
+		t.Fatalf("Expected %v for ID, got %v", e.ID, id)
+	}
+	if org := string(eMsg.Organization()); e.Organization != org {
+		t.Fatalf("Expected %v for Organization, got %v", e.Organization, org)
+	}
+	if url := string(eMsg.WatchpointURL()); e.WatchpointURL != url {
+		t.Fatalf("Expected %v for WatchpointURL, got %v", e.WatchpointURL, url)
+	}
+	if e.Action != eMsg.Action() {
+		t.Fatalf("Expected %v for Action, got %v", e.Action, eMsg.Action)
 	}
 }
