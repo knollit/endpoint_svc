@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net"
@@ -13,6 +14,8 @@ import (
 	"github.com/mikeraimondi/knollit/endpoints/endpoints"
 )
 
+var dbCreated bool
+
 type logWriter struct {
 	*testing.T
 }
@@ -21,8 +24,6 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 	l.Log(string(p))
 	return len(p), nil
 }
-
-var dbCreated bool
 
 func setupDB() (db *sql.DB, err error) {
 	if !dbCreated {
@@ -46,6 +47,21 @@ func setupDB() (db *sql.DB, err error) {
 	}
 	_, err = db.Exec("BEGIN")
 	return
+}
+
+func runServer(s *server, rdy chan int) error {
+	errs := make(chan error)
+	go func() {
+		errs <- s.run()
+	}()
+	select {
+	case err := <-errs:
+		return err
+	case <-time.NewTimer(10 * time.Second).C:
+		return errors.New("Timed out waiting for server to start")
+	case <-rdy:
+		return nil
+	}
 }
 
 func TestEndpointIndexWithOne(t *testing.T) {
@@ -76,50 +92,45 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		logger:   log.New(&logWriter{t}, "", log.Lmicroseconds),
 	}
 
-	// Server startup
-	errs := make(chan error)
-	go func() {
-		errs <- server.run()
-	}()
-	select {
-	case err = <-errs:
+	if err := runServer(server, rdy); err != nil {
 		t.Fatal(err)
-	case <-time.NewTimer(10 * time.Second).C:
-		t.Fatal("Timed out waiting for server to start")
-	case <-rdy:
-		defer server.Close()
-
-		// Begin test
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close()
-
-		b := flatbuffers.NewBuilder(0)
-		endpointReq := endpoint{
-			Action: endpoints.ActionIndex,
-		}
-		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
-			t.Fatal(err)
-		}
-
-		buf, _, err := common.ReadWithSize(conn)
-		if err != nil {
-			t.Fatalf("Error reading response from server: %v", err)
-		}
-		endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
-
-		if len(string(endpointMsg.Id())) <= 24 {
-			t.Fatalf("Expected UUID for ID, got %v", string(endpointMsg.Id()))
-		}
-		if string(endpointMsg.WatchpointURL()) != watchpointURL {
-			t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
-		}
-		if string(endpointMsg.Organization()) != org {
-			t.Fatalf("Expected %v for organization, got %v", org, endpointMsg.Organization)
-		}
 	}
+	defer server.Close()
+
+	// Begin test
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	b := flatbuffers.NewBuilder(0)
+	endpointReq := endpoint{
+		Action: endpoints.ActionIndex,
+	}
+	if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+		t.Fatal(err)
+	}
+
+	buf, _, err := common.ReadWithSize(conn)
+	if err != nil {
+		t.Fatalf("Error reading response from server: %v", err)
+	}
+	endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
+
+	if len(string(endpointMsg.Id())) <= 24 {
+		t.Fatalf("Expected UUID for ID, got %v", string(endpointMsg.Id()))
+	}
+	if string(endpointMsg.WatchpointURL()) != watchpointURL {
+		t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
+	}
+	if string(endpointMsg.Organization()) != org {
+		t.Fatalf("Expected %v for organization, got %v", org, endpointMsg.Organization)
+	}
+}
+
+func TestEndpointReadWithOne(t *testing.T) {
+
 }
 
 func TestAllEndpoints(t *testing.T) {
@@ -156,6 +167,7 @@ func TestAllEndpoints(t *testing.T) {
 }
 
 func TestToFlatBufferBytes(t *testing.T) {
+	t.Parallel()
 	e := endpoint{
 		ID:            "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
 		Organization:  "Test Org",
