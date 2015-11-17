@@ -38,6 +38,21 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 	return
 }
 
+func endpointByID(db *sql.DB, id string) (e *endpoint, err error) {
+	row := db.QueryRow("SELECT id, organization, URL FROM endpoints WHERE id = $1 LIMIT 1", id)
+	var org string
+	var url string
+	if err = row.Scan(&id, &org, &url); err != nil {
+		return
+	}
+	e = &endpoint{
+		ID:           id,
+		Organization: org,
+		URL:          url,
+	}
+	return
+}
+
 func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 	b.Reset()
 

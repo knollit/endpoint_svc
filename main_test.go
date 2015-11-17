@@ -130,8 +130,79 @@ func TestEndpointIndexWithOne(t *testing.T) {
 	}
 }
 
-func TestEndpointReadWithOne(t *testing.T) {
+func TestEndpointReadWithTwo(t *testing.T) {
+	db, err := setupDB()
+	if err != nil {
+		t.Fatal("Error setting up DB: ", err)
+	}
+	defer db.Exec("ROLLBACK")
 
+	// Test-specific setup
+	const id2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
+	const URL2 = "test2"
+	const org2 = "testOrg2"
+	if _, err := db.Exec("INSERT INTO endpoints (id, url, organization) VALUES ($1, $2, $3)", id2, URL2, org2); err != nil {
+		t.Fatal(err)
+	}
+	const id = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62"
+	const URL = "test"
+	const org = "testOrg"
+	if _, err := db.Exec("INSERT INTO endpoints (id, url, organization) VALUES ($1, $2, $3)", id, URL, org); err != nil {
+		t.Fatal(err)
+	}
+
+	// Server setup
+	const addr = ":13900"
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rdy := make(chan int)
+	server := &server{
+		db:       db,
+		listener: l,
+		ready:    rdy,
+		logger:   log.New(&logWriter{t}, "", log.Lmicroseconds),
+	}
+
+	if err := runServer(server, rdy); err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	// Begin test
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	b := flatbuffers.NewBuilder(0)
+	endpointReq := endpoint{
+		ID:           id,
+		Organization: org,
+		Action:       endpoints.ActionRead,
+	}
+
+	if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+		t.Fatal(err)
+	}
+
+	buf, _, err := common.ReadWithSize(conn)
+	if err != nil {
+		t.Fatalf("Error reading response from server: %v", err)
+	}
+	endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
+
+	if msgID := string(endpointMsg.Id()); msgID != id {
+		t.Fatalf("Expected %v for ID, got %v", id, msgID)
+	}
+	if msgURL := string(endpointMsg.URL()); msgURL != URL {
+		t.Fatalf("Expected %v for URL, got %v", URL, msgURL)
+	}
+	if msgOrg := string(endpointMsg.Organization()); msgOrg != org {
+		t.Fatalf("Expected %v for organization, got %v", org, msgOrg)
+	}
 }
 
 func TestAllEndpoints(t *testing.T) {

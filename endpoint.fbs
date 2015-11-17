@@ -1,6 +1,6 @@
 namespace endpoints;
 
-enum Action : byte { New, Index }
+enum Action : byte { New, Index, Read }
 
 table Endpoint {
   id:string;

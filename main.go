@@ -96,24 +96,36 @@ func (s *server) handler(conn net.Conn) {
 		return
 	}
 	req := endpoints.GetRootAsEndpoint(buf, 0)
-	if req.Action() == endpoints.ActionNew {
-		return
-	}
-	endPoints, err := allEndpoints(s.db)
-	if err != nil {
-		s.logger.Print(err)
-		// TODO send error
-		return
-	}
-	b := s.builderPool.Get().(*flatbuffers.Builder)
-	defer s.builderPool.Put(b)
-	for _, e := range endPoints {
+	switch req.Action() {
+	case endpoints.ActionRead:
+		e, err := endpointByID(s.db, string(req.Id()))
+		if err != nil {
+			s.logger.Print(err)
+			// TODO send error
+			return
+		}
+		b := s.builderPool.Get().(*flatbuffers.Builder)
+		defer s.builderPool.Put(b)
 		if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
 			s.logger.Print(err)
 		}
+		return
+	case endpoints.ActionIndex:
+		endPoints, err := allEndpoints(s.db)
+		if err != nil {
+			s.logger.Print(err)
+			// TODO send error
+			return
+		}
+		b := s.builderPool.Get().(*flatbuffers.Builder)
+		defer s.builderPool.Put(b)
+		for _, e := range endPoints {
+			if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
+				s.logger.Print(err)
+			}
+		}
+		return
 	}
-	return
-
 }
 
 func (s *server) run() error {
