@@ -8,15 +8,15 @@ import (
 )
 
 type endpoint struct {
-	ID            string
-	Organization  string
-	WatchpointURL string
-	Action        int8
-	err           error
+	ID           string
+	Organization string
+	URL          string
+	Action       int8
+	err          error
 }
 
 func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
-	rows, err := db.Query("SELECT id, organization, watchpointURL FROM endpoints")
+	rows, err := db.Query("SELECT id, organization, URL FROM endpoints")
 	if err != nil {
 		return
 	}
@@ -24,14 +24,14 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 	for rows.Next() {
 		var id string
 		var org string
-		var watchpointURL string
-		if err = rows.Scan(&id, &org, &watchpointURL); err != nil {
+		var url string
+		if err = rows.Scan(&id, &org, &url); err != nil {
 			return
 		}
 		endpoint := endpoint{
-			ID:            id,
-			Organization:  org,
-			WatchpointURL: watchpointURL,
+			ID:           id,
+			Organization: org,
+			URL:          url,
 		}
 		endpoints = append(endpoints, endpoint)
 	}
@@ -43,13 +43,13 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 
 	idPosition := b.CreateByteString([]byte(e.ID))
 	orgPosition := b.CreateByteString([]byte(e.Organization))
-	urlPosition := b.CreateByteString([]byte(e.WatchpointURL))
+	urlPosition := b.CreateByteString([]byte(e.URL))
 
 	endpoints.EndpointStart(b)
 
 	endpoints.EndpointAddId(b, idPosition)
 	endpoints.EndpointAddOrganization(b, orgPosition)
-	endpoints.EndpointAddWatchpointURL(b, urlPosition)
+	endpoints.EndpointAddURL(b, urlPosition)
 	endpoints.EndpointAddAction(b, e.Action)
 
 	endpointPosition := endpoints.EndpointEnd(b)

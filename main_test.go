@@ -28,7 +28,8 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 func setupDB() (db *sql.DB, err error) {
 	if !dbCreated {
 		// Create test database. Ignore errors.
-		db, _ = sql.Open("postgres", "user=mike host=localhost sslmode=disable")
+		// TODO don't use mike
+		db, _ = sql.Open("postgres", "user=mike host=localhost dbname=postgres sslmode=disable")
 		if err = db.Ping(); err != nil {
 			return
 		}
@@ -72,9 +73,9 @@ func TestEndpointIndexWithOne(t *testing.T) {
 	defer db.Exec("ROLLBACK")
 
 	// Test-specific setup
-	const watchpointURL = "test"
+	const URL = "test"
 	const org = "testOrg"
-	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL, organization) VALUES ($1, $2)", watchpointURL, org); err != nil {
+	if _, err := db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,8 +122,8 @@ func TestEndpointIndexWithOne(t *testing.T) {
 	if len(string(endpointMsg.Id())) <= 24 {
 		t.Fatalf("Expected UUID for ID, got %v", string(endpointMsg.Id()))
 	}
-	if string(endpointMsg.WatchpointURL()) != watchpointURL {
-		t.Fatalf("Expected %v for watchpointURL, got %v", watchpointURL, endpointMsg.WatchpointURL)
+	if string(endpointMsg.URL()) != URL {
+		t.Fatalf("Expected %v for URL, got %v", URL, endpointMsg.URL)
 	}
 	if string(endpointMsg.Organization()) != org {
 		t.Fatalf("Expected %v for organization, got %v", org, endpointMsg.Organization)
@@ -141,9 +142,10 @@ func TestAllEndpoints(t *testing.T) {
 	defer db.Exec("ROLLBACK")
 
 	// Test-specific setup
+	const URL = "http://test.com"
 	const watchpointURL = "test"
 	const org = "testOrg"
-	if _, err := db.Exec("INSERT INTO endpoints (watchpointURL, organization) VALUES ($1, $2)", watchpointURL, org); err != nil {
+	if _, err := db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,8 +160,8 @@ func TestAllEndpoints(t *testing.T) {
 	if len(e.ID) <= 24 {
 		t.Fatalf("Expected UUID for ID, got %v", e.ID)
 	}
-	if e.WatchpointURL != watchpointURL {
-		t.Fatalf("Expected %v for URL, got %v", watchpointURL, e.WatchpointURL)
+	if e.URL != URL {
+		t.Fatalf("Expected %v for URL, got %v", URL, e.URL)
 	}
 	if e.Organization != org {
 		t.Fatalf("Expected %v for organization, got %v", org, e.Organization)
@@ -169,10 +171,10 @@ func TestAllEndpoints(t *testing.T) {
 func TestToFlatBufferBytes(t *testing.T) {
 	t.Parallel()
 	e := endpoint{
-		ID:            "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
-		Organization:  "Test Org",
-		WatchpointURL: "http://foo.bar",
-		Action:        endpoints.ActionNew,
+		ID:           "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
+		Organization: "Test Org",
+		URL:          "http://foo.bar",
+		Action:       endpoints.ActionNew,
 	}
 	buf := e.toFlatBufferBytes(flatbuffers.NewBuilder(0))
 	eMsg := endpoints.GetRootAsEndpoint(buf, 0)
@@ -182,8 +184,8 @@ func TestToFlatBufferBytes(t *testing.T) {
 	if org := string(eMsg.Organization()); e.Organization != org {
 		t.Fatalf("Expected %v for Organization, got %v", e.Organization, org)
 	}
-	if url := string(eMsg.WatchpointURL()); e.WatchpointURL != url {
-		t.Fatalf("Expected %v for WatchpointURL, got %v", e.WatchpointURL, url)
+	if url := string(eMsg.URL()); e.URL != url {
+		t.Fatalf("Expected %v for URL, got %v", e.URL, url)
 	}
 	if e.Action != eMsg.Action() {
 		t.Fatalf("Expected %v for Action, got %v", e.Action, eMsg.Action)
