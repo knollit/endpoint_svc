@@ -13,8 +13,6 @@ import (
 	"github.com/mikeraimondi/knollit/endpoints/endpoints"
 )
 
-var dbCreated bool
-
 type logWriter struct {
 	*testing.T
 }
@@ -24,13 +22,15 @@ func (l *logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func setupDB() (db *sql.DB, err error) {
+var dbCreated bool
+
+func runWithDB(t *testing.T, testFunc func(*sql.DB)) {
 	if !dbCreated {
 		// Create test database. Ignore errors.
 		// TODO don't use mike
-		db, _ = sql.Open("postgres", "user=mike host=localhost dbname=postgres sslmode=disable")
-		if err = db.Ping(); err != nil {
-			return
+		db, _ := sql.Open("postgres", "user=mike host=localhost dbname=postgres sslmode=disable")
+		if err := db.Ping(); err != nil {
+			t.Fatal("Error opening DB: ", err)
 		}
 		db.Exec("DROP DATABASE IF EXISTS endpoints_test")
 		db.Exec("CREATE DATABASE endpoints_test")
@@ -40,51 +40,55 @@ func setupDB() (db *sql.DB, err error) {
 
 	// Setup test database
 	// TODO don't use mike
-	db, _ = sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
+	db, _ := sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
 	setupSQL, _ := ioutil.ReadFile("db/db.sql")
-	if _, err = db.Exec(string(setupSQL)); err != nil {
-		return
+	if _, err := db.Exec(string(setupSQL)); err != nil {
+		t.Fatal("Error setting up DB: ", err)
 	}
-	_, err = db.Exec("BEGIN")
+	if _, err := db.Exec("BEGIN"); err != nil {
+		t.Fatal("Error starting TX: ", err)
+	}
+	defer func() {
+		if _, err := db.Exec("ROLLBACK"); err != nil {
+			t.Fatal("Error rolling back TX: ", err)
+		}
+	}()
+	testFunc(db)
 	return
 }
 
 func runWithServer(t *testing.T, testFunc func(*server)) {
-	// Setup DB
-	db, err := setupDB()
-	if err != nil {
-		t.Fatal("Error setting up DB: ", err)
-	}
-	defer db.Exec("ROLLBACK")
+	runWithDB(t, func(db *sql.DB) {
+		// Setup server
+		const addr = ":13900" // TODO pick a better number?
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rdy := make(chan int)
+		s := &server{
+			db:       db,
+			listener: l,
+			ready:    rdy,
+			logger:   log.New(&logWriter{t}, "", log.Lmicroseconds),
+		}
+		defer s.listener.Close() // TODO better to call s.Close(), but can't because it closes DB
 
-	// Setup server
-	const addr = ":13900" // TODO pick a better number?
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rdy := make(chan int)
-	s := &server{
-		db:       db,
-		listener: l,
-		ready:    rdy,
-		logger:   log.New(&logWriter{t}, "", log.Lmicroseconds),
-	}
-	defer s.Close()
-
-	// Start server on another goroutine
-	errs := make(chan error)
-	go func() {
-		errs <- s.run()
-	}()
-	select {
-	case err := <-errs:
-		t.Fatal(err)
-	case <-time.NewTimer(10 * time.Second).C:
-		t.Fatal("Timed out waiting for server to start")
-	case <-rdy:
-		testFunc(s)
-	}
+		// Start server on another goroutine
+		errs := make(chan error)
+		go func() {
+			errs <- s.run()
+		}()
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+		case <-time.NewTimer(10 * time.Second).C:
+			t.Fatal("Timed out waiting for server to start")
+		case <-rdy:
+			testFunc(s)
+		}
+	})
+	return
 }
 
 func TestEndpointIndexWithOne(t *testing.T) {
@@ -131,7 +135,6 @@ func TestEndpointIndexWithOne(t *testing.T) {
 
 func TestEndpointReadWithTwo(t *testing.T) {
 	runWithServer(t, func(s *server) {
-
 		// Test-specific setup
 		const id2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
 		const URL2 = "test2"
@@ -183,37 +186,33 @@ func TestEndpointReadWithTwo(t *testing.T) {
 }
 
 func TestAllEndpoints(t *testing.T) {
-	db, err := setupDB()
-	if err != nil {
-		t.Fatal("Error setting up DB: ", err)
-	}
-	defer db.Exec("ROLLBACK")
+	runWithDB(t, func(db *sql.DB) {
+		// Test-specific setup
+		const URL = "http://test.com"
+		const watchpointURL = "test"
+		const org = "testOrg"
+		if _, err := db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
+			t.Fatal(err)
+		}
 
-	// Test-specific setup
-	const URL = "http://test.com"
-	const watchpointURL = "test"
-	const org = "testOrg"
-	if _, err := db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
-		t.Fatal(err)
-	}
-
-	endpoints, err := allEndpoints(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if l := len(endpoints); l != 1 {
-		t.Fatalf("Expected 1 endpoint, got %v", l)
-	}
-	e := endpoints[0]
-	if len(e.ID) <= 24 {
-		t.Fatalf("Expected UUID for ID, got %v", e.ID)
-	}
-	if e.URL != URL {
-		t.Fatalf("Expected %v for URL, got %v", URL, e.URL)
-	}
-	if e.Organization != org {
-		t.Fatalf("Expected %v for organization, got %v", org, e.Organization)
-	}
+		endpoints, err := allEndpoints(db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l := len(endpoints); l != 1 {
+			t.Fatalf("Expected 1 endpoint, got %v", l)
+		}
+		e := endpoints[0]
+		if len(e.ID) <= 24 {
+			t.Fatalf("Expected UUID for ID, got %v", e.ID)
+		}
+		if e.URL != URL {
+			t.Fatalf("Expected %v for URL, got %v", URL, e.URL)
+		}
+		if e.Organization != org {
+			t.Fatalf("Expected %v for organization, got %v", org, e.Organization)
+		}
+	})
 }
 
 func TestToFlatBufferBytes(t *testing.T) {
