@@ -95,8 +95,8 @@ func TestEndpointIndexWithOne(t *testing.T) {
 	runWithServer(t, func(s *server) {
 		// Test-specific setup
 		const URL = "test"
-		const org = "testOrg"
-		if _, err := s.db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
+		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
+		if _, err := s.db.Exec("INSERT INTO endpoints (URL, organization_id) VALUES ($1, $2)", URL, org); err != nil {
 			t.Fatal(err)
 		}
 
@@ -127,8 +127,8 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		if string(endpointMsg.URL()) != URL {
 			t.Fatalf("Expected %v for URL, got %v", URL, endpointMsg.URL)
 		}
-		if string(endpointMsg.Organization()) != org {
-			t.Fatalf("Expected %v for organization, got %v", org, endpointMsg.Organization)
+		if orgIDstring := string(endpointMsg.OrganizationID()); orgIDstring != org {
+			t.Fatalf("Expected %v for organization, got %v", org, orgIDstring)
 		}
 	})
 }
@@ -138,14 +138,14 @@ func TestEndpointReadWithTwo(t *testing.T) {
 		// Test-specific setup
 		const id2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
 		const URL2 = "test2"
-		const org2 = "testOrg2"
-		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization) VALUES ($1, $2, $3)", id2, URL2, org2); err != nil {
+		const org2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d63"
+		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id2, URL2, org2); err != nil {
 			t.Fatal(err)
 		}
-		const id = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62"
+		const id = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d64"
 		const URL = "test"
-		const org = "testOrg"
-		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization) VALUES ($1, $2, $3)", id, URL, org); err != nil {
+		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d65"
+		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id, URL, org); err != nil {
 			t.Fatal(err)
 		}
 
@@ -158,9 +158,9 @@ func TestEndpointReadWithTwo(t *testing.T) {
 
 		b := flatbuffers.NewBuilder(0)
 		endpointReq := endpoint{
-			ID:           id,
-			Organization: org,
-			Action:       endpoints.ActionRead,
+			ID:             id,
+			OrganizationID: org,
+			Action:         endpoints.ActionRead,
 		}
 
 		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
@@ -179,7 +179,7 @@ func TestEndpointReadWithTwo(t *testing.T) {
 		if msgURL := string(endpointMsg.URL()); msgURL != URL {
 			t.Fatalf("Expected %v for URL, got %v", URL, msgURL)
 		}
-		if msgOrg := string(endpointMsg.Organization()); msgOrg != org {
+		if msgOrg := string(endpointMsg.OrganizationID()); msgOrg != org {
 			t.Fatalf("Expected %v for organization, got %v", org, msgOrg)
 		}
 	})
@@ -190,8 +190,8 @@ func TestAllEndpoints(t *testing.T) {
 		// Test-specific setup
 		const URL = "http://test.com"
 		const watchpointURL = "test"
-		const org = "testOrg"
-		if _, err := db.Exec("INSERT INTO endpoints (URL, organization) VALUES ($1, $2)", URL, org); err != nil {
+		const org = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d64"
+		if _, err := db.Exec("INSERT INTO endpoints (URL, organization_id) VALUES ($1, $2)", URL, org); err != nil {
 			t.Fatal(err)
 		}
 
@@ -209,8 +209,8 @@ func TestAllEndpoints(t *testing.T) {
 		if e.URL != URL {
 			t.Fatalf("Expected %v for URL, got %v", URL, e.URL)
 		}
-		if e.Organization != org {
-			t.Fatalf("Expected %v for organization, got %v", org, e.Organization)
+		if e.OrganizationID != org {
+			t.Fatalf("Expected %v for organization, got %v", org, e.OrganizationID)
 		}
 	})
 }
@@ -218,18 +218,18 @@ func TestAllEndpoints(t *testing.T) {
 func TestToFlatBufferBytes(t *testing.T) {
 	t.Parallel()
 	e := endpoint{
-		ID:           "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
-		Organization: "Test Org",
-		URL:          "http://foo.bar",
-		Action:       endpoints.ActionNew,
+		ID:             "5ff0fcbc-8b51-11e5-a171-df11d9bd7d62",
+		OrganizationID: "5ff0fcbc-8b51-11e5-a171-df11d9bd7d63",
+		URL:            "http://foo.bar",
+		Action:         endpoints.ActionNew,
 	}
 	buf := e.toFlatBufferBytes(flatbuffers.NewBuilder(0))
 	eMsg := endpoints.GetRootAsEndpoint(buf, 0)
 	if id := string(eMsg.Id()); e.ID != id {
 		t.Fatalf("Expected %v for ID, got %v", e.ID, id)
 	}
-	if org := string(eMsg.Organization()); e.Organization != org {
-		t.Fatalf("Expected %v for Organization, got %v", e.Organization, org)
+	if org := string(eMsg.OrganizationID()); e.OrganizationID != org {
+		t.Fatalf("Expected %v for Organization, got %v", e.OrganizationID, org)
 	}
 	if url := string(eMsg.URL()); e.URL != url {
 		t.Fatalf("Expected %v for URL, got %v", e.URL, url)

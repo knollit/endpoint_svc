@@ -8,15 +8,15 @@ import (
 )
 
 type endpoint struct {
-	ID           string
-	Organization string
-	URL          string
-	Action       int8
-	err          error
+	ID             string
+	OrganizationID string
+	URL            string
+	Action         int8
+	err            error
 }
 
 func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
-	rows, err := db.Query("SELECT id, organization, URL FROM endpoints")
+	rows, err := db.Query("SELECT id, organization_id, URL FROM endpoints")
 	if err != nil {
 		return
 	}
@@ -29,9 +29,9 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 			return
 		}
 		endpoint := endpoint{
-			ID:           id,
-			Organization: org,
-			URL:          url,
+			ID:             id,
+			OrganizationID: org,
+			URL:            url,
 		}
 		endpoints = append(endpoints, endpoint)
 	}
@@ -39,16 +39,16 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 }
 
 func endpointByID(db *sql.DB, id string) (e *endpoint, err error) {
-	row := db.QueryRow("SELECT id, organization, URL FROM endpoints WHERE id = $1 LIMIT 1", id)
+	row := db.QueryRow("SELECT id, organization_id, URL FROM endpoints WHERE id = $1 LIMIT 1", id)
 	var org string
 	var url string
 	if err = row.Scan(&id, &org, &url); err != nil {
 		return
 	}
 	e = &endpoint{
-		ID:           id,
-		Organization: org,
-		URL:          url,
+		ID:             id,
+		OrganizationID: org,
+		URL:            url,
 	}
 	return
 }
@@ -57,13 +57,13 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 	b.Reset()
 
 	idPosition := b.CreateByteString([]byte(e.ID))
-	orgPosition := b.CreateByteString([]byte(e.Organization))
+	orgPosition := b.CreateByteString([]byte(e.OrganizationID))
 	urlPosition := b.CreateByteString([]byte(e.URL))
 
 	endpoints.EndpointStart(b)
 
 	endpoints.EndpointAddId(b, idPosition)
-	endpoints.EndpointAddOrganization(b, orgPosition)
+	endpoints.EndpointAddOrganizationID(b, orgPosition)
 	endpoints.EndpointAddURL(b, urlPosition)
 	endpoints.EndpointAddAction(b, e.Action)
 
