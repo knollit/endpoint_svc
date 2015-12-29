@@ -74,5 +74,6 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 
 	endpointPosition := endpoints.EndpointEnd(b)
 	b.Finish(endpointPosition)
-	return b.Bytes[b.Head():]
+
+	return b.FinishedBytes()
 }
