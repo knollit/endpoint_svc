@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/flatbuffers/go"
 	"github.com/mikeraimondi/knollit/common"
-	"github.com/mikeraimondi/knollit/endpoints/endpoints"
+	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
 )
 
 type logWriter struct {
@@ -96,7 +96,8 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		// Test-specific setup
 		const URL = "test"
 		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
-		if _, err := s.db.Exec("INSERT INTO endpoints (URL, organization_id) VALUES ($1, $2)", URL, org); err != nil {
+		const schema = "some fake schema"
+		if _, err := s.db.Exec("INSERT INTO endpoints (URL, organization_id, schema) VALUES ($1, $2, $3)", URL, org, schema); err != nil {
 			t.Fatal(err)
 		}
 
@@ -127,8 +128,11 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		if string(endpointMsg.URL()) != URL {
 			t.Fatalf("Expected %v for URL, got %v", URL, endpointMsg.URL)
 		}
-		if orgIDstring := string(endpointMsg.OrganizationID()); orgIDstring != org {
-			t.Fatalf("Expected %v for organization, got %v", org, orgIDstring)
+		if msgOrgID := string(endpointMsg.OrganizationID()); msgOrgID != org {
+			t.Fatalf("Expected %v for organization, got %v", org, msgOrgID)
+		}
+		if msgSchema := string(endpointMsg.Schema()); msgSchema != schema {
+			t.Fatalf("Expected %v for organization, got %v", schema, msgSchema)
 		}
 	})
 }

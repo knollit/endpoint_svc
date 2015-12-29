@@ -16,7 +16,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/mikeraimondi/knollit/common"
-	"github.com/mikeraimondi/knollit/endpoints/endpoints"
+	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
 )
 
 var (

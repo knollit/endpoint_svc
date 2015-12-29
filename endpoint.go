@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/google/flatbuffers/go"
-	"github.com/mikeraimondi/knollit/endpoints/endpoints"
+	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
 )
 
 type endpoint struct {
@@ -12,11 +12,12 @@ type endpoint struct {
 	OrganizationID string
 	URL            string
 	Action         int8
+	Schema         string
 	err            error
 }
 
 func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
-	rows, err := db.Query("SELECT id, organization_id, URL FROM endpoints")
+	rows, err := db.Query("SELECT id, organization_id, URL, COALESCE(schema, '') as schema FROM endpoints")
 	if err != nil {
 		return
 	}
@@ -25,13 +26,15 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 		var id string
 		var org string
 		var url string
-		if err = rows.Scan(&id, &org, &url); err != nil {
+		var schema string
+		if err = rows.Scan(&id, &org, &url, &schema); err != nil {
 			return
 		}
 		endpoint := endpoint{
 			ID:             id,
 			OrganizationID: org,
 			URL:            url,
+			Schema:         schema,
 		}
 		endpoints = append(endpoints, endpoint)
 	}
@@ -59,12 +62,14 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 	idPosition := b.CreateByteString([]byte(e.ID))
 	orgPosition := b.CreateByteString([]byte(e.OrganizationID))
 	urlPosition := b.CreateByteString([]byte(e.URL))
+	schemaPosition := b.CreateByteString([]byte(e.Schema))
 
 	endpoints.EndpointStart(b)
 
 	endpoints.EndpointAddId(b, idPosition)
 	endpoints.EndpointAddOrganizationID(b, orgPosition)
 	endpoints.EndpointAddURL(b, urlPosition)
+	endpoints.EndpointAddSchema(b, schemaPosition)
 	endpoints.EndpointAddAction(b, e.Action)
 
 	endpointPosition := endpoints.EndpointEnd(b)
