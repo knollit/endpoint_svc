@@ -10,13 +10,12 @@ import (
 	"log"
 	"net"
 	"os"
-	"sync"
 
-	"github.com/google/flatbuffers/go"
 	_ "github.com/lib/pq"
 
-	"github.com/mikeraimondi/knollit/common"
+	"github.com/mikeraimondi/coelacanth"
 	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
+	"github.com/mikeraimondi/prefixedio"
 )
 
 var (
@@ -61,104 +60,64 @@ func main() {
 		PreferServerCipherSuites: true,
 		MinVersion:               tls.VersionTLS12,
 	}
-	l, err := tls.Listen("tcp", ":13800", tlsConf)
-	if err != nil {
-		logger.Fatal(err)
+
+	serverConf := &coelacanth.Config{
+		DB: db,
+		ListenerFunc: func(addr string) (net.Listener, error) {
+			return tls.Listen("tcp", addr, tlsConf)
+		},
+		Logger: logger,
 	}
-	server := &server{
-		db:       db,
-		logger:   logger,
-		listener: l,
-	}
+	server := coelacanth.NewServer(serverConf)
 	defer func() {
 		if err := server.Close(); err != nil {
-			server.logger.Println("Failed to close server: ", err)
+			server.Logger.Println("Failed to close server: ", err)
 		}
 	}()
 
-	server.logger.Fatal(server.run())
+	server.Logger.Fatal(server.Run(":13800", handler))
 }
 
-type server struct {
-	db          *sql.DB
-	logger      *log.Logger
-	listener    net.Listener
-	ready       chan int
-	builderPool *sync.Pool
-}
-
-func (s *server) handler(conn net.Conn) {
+func handler(conn net.Conn, s *coelacanth.Server) {
 	defer conn.Close()
-	buf, _, err := common.ReadWithSize(conn)
+
+	buf := s.GetPrefixedBuf()
+	defer s.PutPrefixedBuf(buf)
+	_, err := buf.ReadFrom(conn)
 	if err != nil {
-		s.logger.Print("Error reading request: ", err)
+		s.Logger.Print("Error reading request: ", err)
 		// TODO send error
 		return
 	}
-	req := endpoints.GetRootAsEndpoint(buf, 0)
+	req := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
 	switch req.Action() {
 	case endpoints.ActionRead:
-		e, err := endpointByID(s.db, string(req.Id()))
+		e, err := endpointByID(s.DB, string(req.Id()))
 		if err != nil {
-			s.logger.Print(err)
+			s.Logger.Print(err)
 			// TODO send error
 			return
 		}
-		b := s.builderPool.Get().(*flatbuffers.Builder)
-		defer s.builderPool.Put(b)
-		if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
-			s.logger.Print(err)
+		b := s.GetBuilder()
+		defer s.PutBuilder(b)
+		if _, err := prefixedio.WriteBytes(conn, e.toFlatBufferBytes(b)); err != nil {
+			s.Logger.Print(err)
 		}
 		return
 	case endpoints.ActionIndex:
-		endPoints, err := allEndpoints(s.db)
+		endPoints, err := allEndpoints(s.DB)
 		if err != nil {
-			s.logger.Print(err)
+			s.Logger.Print(err)
 			// TODO send error
 			return
 		}
-		b := s.builderPool.Get().(*flatbuffers.Builder)
-		defer s.builderPool.Put(b)
+		b := s.GetBuilder()
+		defer s.PutBuilder(b)
 		for _, e := range endPoints {
-			if _, err := common.WriteWithSize(conn, e.toFlatBufferBytes(b)); err != nil {
-				s.logger.Print(err)
+			if _, err := prefixedio.WriteBytes(conn, e.toFlatBufferBytes(b)); err != nil {
+				s.Logger.Print(err)
 			}
 		}
 		return
 	}
-}
-
-func (s *server) run() error {
-	if err := s.db.Ping(); err != nil {
-		return err
-	}
-
-	s.builderPool = &sync.Pool{
-		New: func() interface{} {
-			return flatbuffers.NewBuilder(0)
-		},
-	}
-
-	s.logger.Printf("Listening for requests on %s...\n", s.listener.Addr())
-	if s.ready != nil {
-		s.ready <- 1
-	}
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			return err
-		}
-		go s.handler(conn)
-	}
-}
-
-func (s *server) Close() error {
-	if err := s.listener.Close(); err != nil {
-		s.logger.Println("Failed to close TCP listener cleanly: ", err)
-	}
-	if err := s.db.Close(); err != nil {
-		s.logger.Println("Failed to close database connection cleanly: ", err)
-	}
-
-	return nil
 }

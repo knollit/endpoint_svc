@@ -1,9 +1,8 @@
 package main
 
 import (
-	"database/sql"
-
 	"github.com/google/flatbuffers/go"
+	"github.com/mikeraimondi/coelacanth"
 	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
 )
 
@@ -16,7 +15,7 @@ type endpoint struct {
 	err            error
 }
 
-func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
+func allEndpoints(db coelacanth.DB) (endpoints []endpoint, err error) {
 	rows, err := db.Query("SELECT id, organization_id, URL, COALESCE(schema, '') as schema FROM endpoints")
 	if err != nil {
 		return
@@ -41,7 +40,7 @@ func allEndpoints(db *sql.DB) (endpoints []endpoint, err error) {
 	return
 }
 
-func endpointByID(db *sql.DB, id string) (e *endpoint, err error) {
+func endpointByID(db coelacanth.DB, id string) (e *endpoint, err error) {
 	row := db.QueryRow("SELECT id, organization_id, URL FROM endpoints WHERE id = $1 LIMIT 1", id)
 	var org string
 	var url string

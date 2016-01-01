@@ -1,108 +1,37 @@
 package main
 
 import (
-	"database/sql"
-	"io/ioutil"
-	"log"
+	"flag"
 	"net"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/google/flatbuffers/go"
+	"github.com/mikeraimondi/coelacanth"
+	ct "github.com/mikeraimondi/coelacanth/testing"
 	"github.com/mikeraimondi/knollit/common"
 	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
 )
 
-type logWriter struct {
-	*testing.T
-}
-
-func (l *logWriter) Write(p []byte) (n int, err error) {
-	l.Log(string(p))
-	return len(p), nil
-}
-
-var dbCreated bool
-
-func runWithDB(t *testing.T, testFunc func(*sql.DB)) {
-	if !dbCreated {
-		// Create test database. Ignore errors.
-		// TODO don't use mike
-		db, _ := sql.Open("postgres", "user=mike host=localhost dbname=postgres sslmode=disable")
-		if err := db.Ping(); err != nil {
-			t.Fatal("Error opening DB: ", err)
-		}
-		db.Exec("DROP DATABASE IF EXISTS endpoints_test")
-		db.Exec("CREATE DATABASE endpoints_test")
-		db.Close()
-		dbCreated = true
-	}
-
-	// Setup test database
-	// TODO don't use mike
-	db, _ := sql.Open("postgres", "user=mike host=localhost dbname=endpoints_test sslmode=disable")
-	setupSQL, _ := ioutil.ReadFile("db/db.sql")
-	if _, err := db.Exec(string(setupSQL)); err != nil {
-		t.Fatal("Error setting up DB: ", err)
-	}
-	if _, err := db.Exec("BEGIN"); err != nil {
-		t.Fatal("Error starting TX: ", err)
-	}
-	defer func() {
-		if _, err := db.Exec("ROLLBACK"); err != nil {
-			t.Fatal("Error rolling back TX: ", err)
-		}
-	}()
-	testFunc(db)
-	return
-}
-
-func runWithServer(t *testing.T, testFunc func(*server)) {
-	runWithDB(t, func(db *sql.DB) {
-		// Setup server
-		const addr = ":13900" // TODO pick a better number?
-		l, err := net.Listen("tcp", addr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rdy := make(chan int)
-		s := &server{
-			db:       db,
-			listener: l,
-			ready:    rdy,
-			logger:   log.New(&logWriter{t}, "", log.Lmicroseconds),
-		}
-		defer s.listener.Close() // TODO better to call s.Close(), but can't because it closes DB
-
-		// Start server on another goroutine
-		errs := make(chan error)
-		go func() {
-			errs <- s.run()
-		}()
-		select {
-		case err := <-errs:
-			t.Fatal(err)
-		case <-time.NewTimer(10 * time.Second).C:
-			t.Fatal("Timed out waiting for server to start")
-		case <-rdy:
-			testFunc(s)
-		}
-	})
-	return
+func TestMain(m *testing.M) {
+	flag.Parse()
+	exitCode := m.Run()
+	ct.RunAfterCallbacks()
+	os.Exit(exitCode)
 }
 
 func TestEndpointIndexWithOne(t *testing.T) {
-	runWithServer(t, func(s *server) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server) {
 		// Test-specific setup
 		const URL = "test"
 		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
 		const schema = "some fake schema"
-		if _, err := s.db.Exec("INSERT INTO endpoints (URL, organization_id, schema) VALUES ($1, $2, $3)", URL, org, schema); err != nil {
+		if _, err := s.DB.Exec("INSERT INTO endpoints (URL, organization_id, schema) VALUES ($1, $2, $3)", URL, org, schema); err != nil {
 			t.Fatal(err)
 		}
 
 		// Begin test
-		conn, err := net.Dial("tcp", s.listener.Addr().String())
+		conn, err := net.Dial("tcp", s.GetAddr())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,23 +67,23 @@ func TestEndpointIndexWithOne(t *testing.T) {
 }
 
 func TestEndpointReadWithTwo(t *testing.T) {
-	runWithServer(t, func(s *server) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server) {
 		// Test-specific setup
 		const id2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
 		const URL2 = "test2"
 		const org2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d63"
-		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id2, URL2, org2); err != nil {
+		if _, err := s.DB.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id2, URL2, org2); err != nil {
 			t.Fatal(err)
 		}
 		const id = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d64"
 		const URL = "test"
 		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d65"
-		if _, err := s.db.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id, URL, org); err != nil {
+		if _, err := s.DB.Exec("INSERT INTO endpoints (id, url, organization_id) VALUES ($1, $2, $3)", id, URL, org); err != nil {
 			t.Fatal(err)
 		}
 
 		// Begin test
-		conn, err := net.Dial("tcp", s.listener.Addr().String())
+		conn, err := net.Dial("tcp", s.GetAddr())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -190,7 +119,7 @@ func TestEndpointReadWithTwo(t *testing.T) {
 }
 
 func TestAllEndpoints(t *testing.T) {
-	runWithDB(t, func(db *sql.DB) {
+	ct.RunWithDB(t, func(db *ct.TestDB) {
 		// Test-specific setup
 		const URL = "http://test.com"
 		const watchpointURL = "test"
