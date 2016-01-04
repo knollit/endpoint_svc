@@ -13,8 +13,8 @@ import (
 
 	_ "github.com/lib/pq"
 
+	"github.com/knollit/coelacanth"
 	"github.com/knollit/endpoint_svc/endpoints"
-	"github.com/mikeraimondi/coelacanth"
 	"github.com/mikeraimondi/prefixedio"
 )
 

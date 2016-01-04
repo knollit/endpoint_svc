@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/google/flatbuffers/go"
-	"github.com/mikeraimondi/coelacanth"
+	"github.com/knollit/coelacanth"
 	"github.com/knollit/endpoint_svc/endpoints"
 )
 
