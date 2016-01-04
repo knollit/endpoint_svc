@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/google/flatbuffers/go"
 	"github.com/mikeraimondi/coelacanth"
-	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
+	"github.com/knollit/endpoint_svc/endpoints"
 )
 
 type endpoint struct {

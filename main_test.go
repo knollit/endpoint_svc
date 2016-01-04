@@ -9,8 +9,8 @@ import (
 	"github.com/google/flatbuffers/go"
 	"github.com/mikeraimondi/coelacanth"
 	ct "github.com/mikeraimondi/coelacanth/testing"
-	"github.com/mikeraimondi/knollit/common"
-	"github.com/mikeraimondi/knollit/endpoint_svc/endpoints"
+	"github.com/knollit/common"
+	"github.com/knollit/endpoint_svc/endpoints"
 )
 
 func TestMain(m *testing.M) {
