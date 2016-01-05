@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestEndpointIndexWithOne(t *testing.T) {
-	ct.RunWithServer(t, handler, func(s *coelacanth.Server) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server, addr net.Addr) {
 		// Test-specific setup
 		const URL = "test"
 		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
@@ -31,7 +31,7 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		}
 
 		// Begin test
-		conn, err := net.Dial("tcp", s.GetAddr())
+		conn, err := net.Dial("tcp", addr.String())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +68,7 @@ func TestEndpointIndexWithOne(t *testing.T) {
 }
 
 func TestEndpointReadWithTwo(t *testing.T) {
-	ct.RunWithServer(t, handler, func(s *coelacanth.Server) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server, addr net.Addr) {
 		// Test-specific setup
 		const id2 = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
 		const URL2 = "test2"
@@ -84,7 +84,7 @@ func TestEndpointReadWithTwo(t *testing.T) {
 		}
 
 		// Begin test
-		conn, err := net.Dial("tcp", s.GetAddr())
+		conn, err := net.Dial("tcp", addr.String())
 		if err != nil {
 			t.Fatal(err)
 		}
