@@ -9,8 +9,8 @@ import (
 	"github.com/google/flatbuffers/go"
 	"github.com/knollit/coelacanth"
 	ct "github.com/knollit/coelacanth/testing"
-	"github.com/knollit/common"
 	"github.com/knollit/endpoint_svc/endpoints"
+	"github.com/mikeraimondi/prefixedio"
 )
 
 func TestMain(m *testing.M) {
@@ -41,15 +41,16 @@ func TestEndpointIndexWithOne(t *testing.T) {
 		endpointReq := endpoint{
 			Action: endpoints.ActionIndex,
 		}
-		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+		if _, err := prefixedio.WriteBytes(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
 			t.Fatal(err)
 		}
 
-		buf, _, err := common.ReadWithSize(conn)
+		var buf prefixedio.Buffer
+		_, err = buf.ReadFrom(conn)
 		if err != nil {
 			t.Fatalf("Error reading response from server: %v", err)
 		}
-		endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
+		endpointMsg := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
 
 		if len(string(endpointMsg.Id())) <= 24 {
 			t.Fatalf("Expected UUID for ID, got %v", string(endpointMsg.Id()))
@@ -96,15 +97,16 @@ func TestEndpointReadWithTwo(t *testing.T) {
 			Action:         endpoints.ActionRead,
 		}
 
-		if _, err := common.WriteWithSize(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+		if _, err := prefixedio.WriteBytes(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
 			t.Fatal(err)
 		}
 
-		buf, _, err := common.ReadWithSize(conn)
+		var buf prefixedio.Buffer
+		_, err = buf.ReadFrom(conn)
 		if err != nil {
 			t.Fatalf("Error reading response from server: %v", err)
 		}
-		endpointMsg := endpoints.GetRootAsEndpoint(buf, 0)
+		endpointMsg := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
 
 		if msgID := string(endpointMsg.Id()); msgID != id {
 			t.Fatalf("Expected %v for ID, got %v", id, msgID)
