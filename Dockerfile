@@ -1,8 +1,8 @@
 FROM centurylink/ca-certs
 
-COPY endpoints /
+COPY endpoint_svc /
 COPY certs /
 
 EXPOSE 13800
 
-ENTRYPOINT ["/endpoints"]
+ENTRYPOINT ["/endpoint_svc"]
