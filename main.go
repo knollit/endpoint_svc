@@ -90,6 +90,8 @@ func handler(conn net.Conn, s *coelacanth.Server) {
 		return
 	}
 	req := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
+	b := s.GetBuilder()
+	defer s.PutBuilder(b)
 	switch req.Action() {
 	case endpoints.ActionRead:
 		e, err := endpointByID(s.DB, string(req.Id()))
@@ -98,8 +100,6 @@ func handler(conn net.Conn, s *coelacanth.Server) {
 			// TODO send error
 			return
 		}
-		b := s.GetBuilder()
-		defer s.PutBuilder(b)
 		if _, err := prefixedio.WriteBytes(conn, e.toFlatBufferBytes(b)); err != nil {
 			s.Logger.Print(err)
 		}
@@ -111,13 +111,20 @@ func handler(conn net.Conn, s *coelacanth.Server) {
 			// TODO send error
 			return
 		}
-		b := s.GetBuilder()
-		defer s.PutBuilder(b)
 		for _, e := range endPoints {
 			if _, err := prefixedio.WriteBytes(conn, e.toFlatBufferBytes(b)); err != nil {
 				s.Logger.Print(err)
 			}
 		}
+		return
+	case endpoints.ActionNew:
+		newEndpoint := endpoint{
+			OrganizationID: string(req.OrganizationID()),
+			URL:            string(req.URL()),
+		}
+		row := s.DB.QueryRow("INSERT INTO endpoints (organization_id, url) VALUES ($1, $2) RETURNING id", newEndpoint.OrganizationID, newEndpoint.URL)
+		row.Scan(&newEndpoint.ID)                                     // TODO err
+		prefixedio.WriteBytes(conn, newEndpoint.toFlatBufferBytes(b)) // TODO err
 		return
 	}
 }

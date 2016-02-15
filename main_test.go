@@ -173,3 +173,52 @@ func TestToFlatBufferBytes(t *testing.T) {
 		t.Fatalf("Expected %v for Action, got %v", e.Action, eMsg.Action)
 	}
 }
+
+func TestEndpointNew(t *testing.T) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server, addr string) {
+		// Test-specific setup
+		const URL = "test"
+		const org = "5ff0fcbd-8b51-11e5-a171-df11d9bd7d62"
+		const schema = "some fake schema"
+
+		// Begin test
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		b := flatbuffers.NewBuilder(0)
+		endpointReq := endpoint{
+			OrganizationID: org,
+			URL:            URL,
+			Action:         endpoints.ActionNew,
+		}
+		if _, err := prefixedio.WriteBytes(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+			t.Fatal(err)
+		}
+
+		var buf prefixedio.Buffer
+		_, err = buf.ReadFrom(conn)
+		if err != nil {
+			t.Fatalf("error reading response from server: %v\n", err)
+		}
+		endpointMsg := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
+
+		id := string(endpointMsg.Id())
+		if len(id) <= 24 {
+			t.Fatalf("UUID does not match. expected: a 24 char ID. actual: %v\n", id)
+		}
+		if string(endpointMsg.URL()) != URL {
+			t.Fatalf("URL does not match. expected: %v. actual %v\n", URL, endpointMsg.URL)
+		}
+		if msgOrgID := string(endpointMsg.OrganizationID()); msgOrgID != org {
+			t.Fatalf("organization does not match. expected: %v. actual: %v\n", org, msgOrgID)
+		}
+		if newEndpoint, err := endpointByID(s.DB, id); err != nil {
+			t.Fatal("error getting new endpoint from DB: ", err)
+		} else if newEndpoint.URL != URL {
+			t.Fatalf("URL does not match in DB. expected: %v. actual %v\n", URL, newEndpoint.URL)
+		}
+	})
+}
