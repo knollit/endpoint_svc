@@ -96,7 +96,7 @@ func handler(conn net.Conn, s *coelacanth.Server) {
 	case endpoints.ActionRead:
 		e, err := endpointByID(s.DB, string(req.Id()))
 		if err != nil {
-			s.Logger.Print(err)
+			s.Logger.Print("Error getting endpoint by ID: ", err)
 			// TODO send error
 			return
 		}

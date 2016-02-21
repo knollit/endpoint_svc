@@ -1,6 +1,9 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
+
 	"github.com/google/flatbuffers/go"
 	"github.com/knollit/coelacanth"
 	"github.com/knollit/endpoint_svc/endpoints"
@@ -14,6 +17,8 @@ type endpoint struct {
 	Schema         string
 	err            error
 }
+
+const notFoundErrMsg = "not found"
 
 func allEndpoints(db coelacanth.DB) (endpoints []endpoint, err error) {
 	rows, err := db.Query("SELECT id, organization_id, URL, COALESCE(schema, '') as schema FROM endpoints")
@@ -40,19 +45,23 @@ func allEndpoints(db coelacanth.DB) (endpoints []endpoint, err error) {
 	return
 }
 
-func endpointByID(db coelacanth.DB, id string) (e *endpoint, err error) {
+func endpointByID(db coelacanth.DB, id string) (*endpoint, error) {
 	row := db.QueryRow("SELECT id, organization_id, URL FROM endpoints WHERE id = $1 LIMIT 1", id)
 	var org string
 	var url string
-	if err = row.Scan(&id, &org, &url); err != nil {
-		return
+	if err := row.Scan(&id, &org, &url); err == sql.ErrNoRows {
+		return &endpoint{
+			ID:  id,
+			err: errors.New(notFoundErrMsg),
+		}, nil
+	} else if err != nil {
+		return nil, err
 	}
-	e = &endpoint{
+	return &endpoint{
 		ID:             id,
 		OrganizationID: org,
 		URL:            url,
-	}
-	return
+	}, nil
 }
 
 func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
@@ -62,6 +71,10 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 	orgPosition := b.CreateByteString([]byte(e.OrganizationID))
 	urlPosition := b.CreateByteString([]byte(e.URL))
 	schemaPosition := b.CreateByteString([]byte(e.Schema))
+	var errPosition flatbuffers.UOffsetT
+	if e.err != nil {
+		errPosition = b.CreateByteString([]byte(e.err.Error()))
+	}
 
 	endpoints.EndpointStart(b)
 
@@ -69,6 +82,9 @@ func (e *endpoint) toFlatBufferBytes(b *flatbuffers.Builder) []byte {
 	endpoints.EndpointAddOrganizationID(b, orgPosition)
 	endpoints.EndpointAddURL(b, urlPosition)
 	endpoints.EndpointAddSchema(b, schemaPosition)
+	if e.err != nil {
+		endpoints.EndpointAddError(b, errPosition)
+	}
 	endpoints.EndpointAddAction(b, e.Action)
 
 	endpointPosition := endpoints.EndpointEnd(b)

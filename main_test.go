@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"net"
 	"os"
@@ -120,6 +121,44 @@ func TestEndpointReadWithTwo(t *testing.T) {
 	})
 }
 
+func TestEndpointReadNotFound(t *testing.T) {
+	ct.RunWithServer(t, handler, func(s *coelacanth.Server, addr string) {
+		// Test-specific setup
+		const id = "5ff0fcbc-8b51-11e5-a171-df11d9bd7d64"
+
+		// Begin test
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		b := flatbuffers.NewBuilder(0)
+		endpointReq := endpoint{
+			ID:     id,
+			Action: endpoints.ActionRead,
+		}
+
+		if _, err := prefixedio.WriteBytes(conn, endpointReq.toFlatBufferBytes(b)); err != nil {
+			t.Fatal(err)
+		}
+
+		var buf prefixedio.Buffer
+		_, err = buf.ReadFrom(conn)
+		if err != nil {
+			t.Fatalf("error reading response from server: %v", err)
+		}
+		endpointMsg := endpoints.GetRootAsEndpoint(buf.Bytes(), 0)
+
+		if msgID := string(endpointMsg.Id()); msgID != id {
+			t.Fatalf("ID does not match. expected: %v. actual: %v.\n", id, msgID)
+		}
+		if errorMsg := string(endpointMsg.Error()); errorMsg != notFoundErrMsg {
+			t.Fatalf("error message does not match. expected: %v. actual: %v.\n", notFoundErrMsg, errorMsg)
+		}
+	})
+}
+
 func TestAllEndpoints(t *testing.T) {
 	ct.RunWithDB(t, func(db *ct.TestDB) {
 		// Test-specific setup
@@ -157,21 +196,37 @@ func TestToFlatBufferBytes(t *testing.T) {
 		OrganizationID: "5ff0fcbc-8b51-11e5-a171-df11d9bd7d63",
 		URL:            "http://foo.bar",
 		Action:         endpoints.ActionNew,
+		err:            errors.New("some error"),
 	}
 	buf := e.toFlatBufferBytes(flatbuffers.NewBuilder(0))
 	eMsg := endpoints.GetRootAsEndpoint(buf, 0)
 	if id := string(eMsg.Id()); e.ID != id {
-		t.Fatalf("Expected %v for ID, got %v", e.ID, id)
+		t.Fatalf("ID does not match. expected: %v. actual: %v.\n", e.ID, id)
 	}
 	if org := string(eMsg.OrganizationID()); e.OrganizationID != org {
-		t.Fatalf("Expected %v for Organization, got %v", e.OrganizationID, org)
+		t.Fatalf("organization ID does not match. expected: %v. actual: %v.\n", e.OrganizationID, org)
 	}
 	if url := string(eMsg.URL()); e.URL != url {
-		t.Fatalf("Expected %v for URL, got %v", e.URL, url)
+		t.Fatalf("URL does not match. expected: %v. actual: %v.\n", e.URL, url)
 	}
 	if e.Action != eMsg.Action() {
-		t.Fatalf("Expected %v for Action, got %v", e.Action, eMsg.Action)
+		t.Fatalf("action does not match. expected: %v. actual: %v.\n", e.Action, eMsg.Action)
 	}
+	if e.err.Error() != string(eMsg.Error()) {
+		t.Fatalf("error message does not match. expected: %v. actual: %s.\n", e.err, eMsg.Error())
+	}
+}
+
+func TestEndpointByIDNoResults(t *testing.T) {
+	ct.RunWithDB(t, func(db *ct.TestDB) {
+		res, err := endpointByID(db, "5ff0fcbc-8b51-11e5-a171-df11d9bd7d64")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.err.Error() != notFoundErrMsg {
+			t.Fatalf("error message does not match. expected: %v. actual: %v.\n", notFoundErrMsg, res.err)
+		}
+	})
 }
 
 func TestEndpointNew(t *testing.T) {
