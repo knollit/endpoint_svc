@@ -1,4 +1,4 @@
-repo = knollit/"$$PROJECT_NAME"_rdbms
+repo = knollit/endpoint_svc_rdbms
 
 all: build
 

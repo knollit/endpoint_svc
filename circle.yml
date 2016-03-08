@@ -1,8 +1,6 @@
 machine:
   services:
     - docker
-  environment:
-    PROJECT_NAME: endpoint_svc
 dependencies:
   cache_directories:
     - ~/flatbuffers
